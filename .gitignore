@@ -1,0 +1,31 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Packaging / build / PyInstaller
+build/
+dist/
+*.egg-info/
+*.spec
+
+# IDE settings
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Project data (如果不想把这些录制数据纳入版本，请取消下面三行注释)
+ recordings/
+ recording.json
+ tasks.json
