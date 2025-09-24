@@ -1,6 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication
 from main_window import MacroRecorderApp
+from custom_process_integration import install_custom_process_feature
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -39,9 +40,10 @@ if __name__ == "__main__":
 
     try:
         window = MacroRecorderApp()
+        # 最小侵入式安装“自定义过程”功能（新增“工具->自定义过程...”菜单项）
+        install_custom_process_feature(window)
+
         window.show()
         sys.exit(app.exec_())
     except Exception as e:
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.critical(None, "启动错误", f"应用程序启动失败: {str(e)}")
-        sys.exit(1)
+        print(f"启动失败: {e}")
