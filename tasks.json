@@ -1,0 +1,303 @@
+[
+  {
+    "name": "zmxy4",
+    "loop_count": 0,
+    "loop_delay": 30.0,
+    "steps": [
+      {
+        "name": "\u5237\u5173 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5237\u5173.json",
+        "repeat": 100,
+        "delay": 3.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u5237\u7ecf\u9a8c\u7075\u9b42",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u60ac\u8d4fThe_new \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\recordings\\\u60ac\u8d4fThe_new.json",
+        "repeat": 30,
+        "delay": 0.0,
+        "enabled": true
+      },
+      {
+        "name": "\u5237\u65b0\u6d4f\u89c8\u5668 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\recordings\\\u5237\u65b0\u6d4f\u89c8\u5668.json",
+        "repeat": 1,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u8fde\u70b9\u5668",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u5f55\u5236_20250810_225321 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\recordings\\\u5f55\u5236_20250810_225321.json",
+        "repeat": 1,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "levelUp_zmxy4",
+    "loop_count": 0,
+    "loop_delay": 10.0,
+    "steps": [
+      {
+        "name": "\u60ac\u8d4fNEW \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u60ac\u8d4fNEW.json",
+        "repeat": 30,
+        "delay": 0.0,
+        "enabled": true
+      },
+      {
+        "name": "\u5237\u65b0\u6d4f\u89c8\u5668NEW \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5237\u65b0\u6d4f\u89c8\u5668NEW.json",
+        "repeat": 2,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u6597\u5ba0",
+    "loop_count": 1,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u6597\u5ba0NEW \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u6597\u5ba0NEW.json",
+        "repeat": 10,
+        "delay": 1.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u87ba\u65cb\u5730\u72f1",
+    "loop_count": 1,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u87ba\u65cb\u5730\u72f1 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u87ba\u65cb\u5730\u72f1.json",
+        "repeat": 1,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u8ffd\u6355\u5927\u76d7",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u5927\u76d7 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5927\u76d7.json",
+        "repeat": 50,
+        "delay": 5.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u8ffd\u6355\u5927\u76d7\uff08\u975e\u987b\u5f25\u5c71\uff09",
+    "loop_count": 0,
+    "loop_delay": 10.0,
+    "steps": [
+      {
+        "name": "\u5927\u76d7\uff08\u975e\u987b\u5f25\u5c71\uff09 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5927\u76d7\uff08\u975e\u987b\u5f25\u5c71\uff09.json",
+        "repeat": 100,
+        "delay": 5.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u8fde\u70b9\u53f3\u4e0b\u89d2",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u8fde\u70b9\u53f3\u4e0b\u89d2 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u8fde\u70b9\u53f3\u4e0b\u89d2.json",
+        "repeat": 50,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u539f\u795e\u5267\u60c5",
+    "loop_count": 0,
+    "loop_delay": 1.0,
+    "steps": [
+      {
+        "name": "\u539f\u795e\u8fc7\u5267\u60c5 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u539f\u795e\u8fc7\u5267\u60c5.json",
+        "repeat": 100,
+        "delay": 0.5,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "4\u5251",
+    "loop_count": 1,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u5669\u68a64\u5251 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5669\u68a64\u5251.json",
+        "repeat": 1,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u9ad8\u6218\u79d2\u8ffd\u6355",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u8ffd\u6355\u60ac\u8d4f \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u8ffd\u6355\u60ac\u8d4f.json",
+        "repeat": 100,
+        "delay": 1.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u987b\u5f25\u5c71\u8ffd\u6355",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u8ffd\u6355_\u987b\u5f25\u5c71 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u8ffd\u6355_\u987b\u5f25\u5c71.json",
+        "repeat": 100,
+        "delay": 1.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u5916\u63a5\u8fde\u70b9\u53f3\u4e0b\u89d2",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u5916\u63a5\u8fde\u70b9\u53f3\u4e0b\u89d2 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5916\u63a5\u8fde\u70b9\u53f3\u4e0b\u89d2.json",
+        "repeat": 1,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u5e1d\u7a7a",
+    "loop_count": 0,
+    "loop_delay": 3.0,
+    "steps": [
+      {
+        "name": "\u5e1d\u7a7a \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5e1d\u7a7a.json",
+        "repeat": 1,
+        "delay": 1.0,
+        "enabled": true
+      },
+      {
+        "name": "\u8fd4\u56de\u5730\u56fe \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u8fd4\u56de\u5730\u56fe.json",
+        "repeat": 1,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u70b9\u8d5e",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u70b9\u8d5e \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u70b9\u8d5e.json",
+        "repeat": 1,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u897f\u6e38",
+    "loop_count": 0,
+    "loop_delay": 1.0,
+    "steps": [
+      {
+        "name": "\u5f55\u5236_20250901_170323 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5f55\u5236_20250901_170323.json",
+        "repeat": 100,
+        "delay": 0.5,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "silk song",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "silk song \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\silk song.json",
+        "repeat": 100,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "2",
+    "loop_count": 0,
+    "loop_delay": 0.0,
+    "steps": [
+      {
+        "name": "\u5f55\u5236_20250920_022025 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u5f55\u5236_20250920_022025.json",
+        "repeat": 1,
+        "delay": 1200.0,
+        "enabled": true
+      }
+    ]
+  },
+  {
+    "name": "\u81ea\u5b9a\u4e49\u6d4b\u8bd5",
+    "loop_count": 100,
+    "loop_delay": 1260.0,
+    "steps": [
+      {
+        "name": "\u81ea\u5b9a\u4e49\u6d4b\u8bd5 \u6b65\u9aa4",
+        "file_path": "C:\\Users\\ASUS\\Desktop\\study\\Keyboard\\Macro_Recoder\\recordings\\\u81ea\u5b9a\u4e49\u6d4b\u8bd5.json",
+        "repeat": 1,
+        "delay": 0.0,
+        "enabled": true
+      }
+    ]
+  }
+]

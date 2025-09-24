@@ -294,6 +294,162 @@ class OceanLabel(QLabel):
         """)
 
 
+# ===== 延迟单位工具与委托（在单文件中实现，无需改 delegates.py） =====
+
+def _format_duration_seconds(seconds: float) -> str:
+    """将秒的浮点值格式化为 毫秒/秒/分钟 文本"""
+    try:
+        s = float(seconds)
+    except Exception:
+        s = 0.0
+
+    if s < 1.0:
+        ms = int(round(s * 1000.0))
+        return f"{ms} 毫秒"
+    if s >= 60.0:
+        mins = s / 60.0
+        if abs(mins - round(mins)) < 1e-3:
+            return f"{int(round(mins))} 分钟"
+    text = f"{s:.3f}".rstrip("0").rstrip(".")
+    return f"{text} 秒"
+
+
+def _parse_display_to_seconds(text: str) -> float:
+    """从显示文本解析“秒”的浮点值，支持 毫秒/秒/分钟 或纯数字（默认秒）"""
+    if text is None:
+        return 0.0
+    s = str(text).strip().lower()
+
+    # 尝试直接转秒（纯数字）
+    try:
+        return max(0.0, float(s))
+    except Exception:
+        pass
+
+    num = ""
+    for ch in s:
+        if ch.isdigit() or ch in ".-":
+            num += ch
+        elif ch == ",":
+            num += "."
+    if num in ("", ".", "-"):
+        num_val = 0.0
+    else:
+        try:
+            num_val = float(num)
+        except Exception:
+            num_val = 0.0
+
+    if "毫秒" in s or "ms" in s:
+        return max(0.0, num_val / 1000.0)
+    if "分钟" in s or "分" in s or "min" in s:
+        return max(0.0, num_val * 60.0)
+    # 默认当秒
+    return max(0.0, num_val)
+
+
+class _DelayUnitEditor(QWidget):
+    """组合编辑器：数值 + 单位（毫秒 / 秒 / 分钟），对外以秒浮点值进行读写（0ms~60min）"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.spin = QDoubleSpinBox(self)
+        self.spin.setDecimals(3)
+        self.spin.setMinimum(0.0)
+        self.spin.setSingleStep(1.0)
+
+        self.unit = QComboBox(self)
+        self.unit.addItems(["毫秒", "秒", "分钟"])
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(self.spin)
+        layout.addWidget(self.unit)
+        self.setLayout(layout)
+
+        self.unit.currentIndexChanged.connect(self._on_unit_changed)
+        self._on_unit_changed()
+
+    def _on_unit_changed(self):
+        u = self.unit.currentText()
+        # 将当前值先换算为秒，再切换单位与范围
+        sec = self.seconds()
+        if u == "毫秒":
+            self.spin.setDecimals(0)
+            self.spin.setRange(0, 3_600_000)  # 0ms~60min
+            self.spin.setSuffix(" 毫秒")
+            self.spin.setValue(int(round(sec * 1000.0)))
+        elif u == "秒":
+            self.spin.setDecimals(3)
+            self.spin.setRange(0.0, 3600.0)  # 0s~60min
+            self.spin.setSuffix(" 秒")
+            self.spin.setValue(sec)
+        else:
+            self.spin.setDecimals(3)
+            self.spin.setRange(0.0, 60.0)  # 0min~60min
+            self.spin.setSuffix(" 分钟")
+            self.spin.setValue(sec / 60.0)
+
+    def set_seconds(self, seconds: float):
+        try:
+            s = float(seconds)
+        except Exception:
+            s = 0.0
+        # 选个合适的单位
+        if s < 1.0:
+            self.unit.setCurrentText("毫秒")
+            self.spin.setValue(int(round(s * 1000.0)))
+        elif s >= 60.0 and abs((s / 60.0) - round(s / 60.0)) < 1e-3:
+            self.unit.setCurrentText("分钟")
+            self.spin.setValue(s / 60.0)
+        else:
+            self.unit.setCurrentText("秒")
+            self.spin.setValue(s)
+
+    def seconds(self) -> float:
+        u = self.unit.currentText()
+        v = self.spin.value()
+        if u == "毫秒":
+            return float(v) / 1000.0
+        if u == "分钟":
+            return float(v) * 60.0
+        return float(v)
+
+
+class DelayUnitDelegate(QStyledItemDelegate):
+    """步骤延迟委托（第4列）：毫秒/秒/分钟 输入，写回为“秒”的浮点值，并设置友好显示文本"""
+
+    def createEditor(self, parent, option, index):
+        return _DelayUnitEditor(parent)
+
+    def setEditorData(self, editor, index):
+        # 优先从 UserRole 拿秒值
+        user_seconds = index.model().data(index, Qt.UserRole)
+        if user_seconds is None:
+            # 解析显示文本
+            value = index.model().data(index, Qt.DisplayRole)
+            seconds = _parse_display_to_seconds(value)
+        else:
+            try:
+                seconds = float(user_seconds)
+            except Exception:
+                seconds = 0.0
+        editor.set_seconds(seconds)
+
+    def setModelData(self, editor, model, index):
+        seconds = max(0.0, float(editor.seconds()))
+        # 编辑值（用于 item.text / 可编辑）
+        model.setData(index, seconds, Qt.EditRole)
+        # 格式化显示
+        model.setData(index, _format_duration_seconds(seconds), Qt.DisplayRole)
+        # 也写入 UserRole，便于下次编辑直接读取
+        model.setData(index, seconds, Qt.UserRole)
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.setGeometry(option.rect)
+
+
 class MacroRecorderApp(QMainWindow):
     """主应用程序窗口 - 蓝白海洋风格"""
 
@@ -498,13 +654,41 @@ class MacroRecorderApp(QMainWindow):
         self.loop_spin.setValue(1)
         loop_layout.addWidget(self.loop_spin, 1)
 
-        loop_layout.addWidget(OceanLabel("循环间隔(秒):"))
+        loop_layout.addWidget(OceanLabel("循环间隔:"))
 
+        # 新的循环间隔输入（数值 + 单位）
         self.loop_delay_spin = OceanDoubleSpinBox()
-        self.loop_delay_spin.setRange(0, 3600)
-        self.loop_delay_spin.setValue(0)
-        self.loop_delay_spin.setSuffix(" 秒")
+        self.loop_delay_spin.setDecimals(3)
+        self.loop_delay_unit = QComboBox()
+        self.loop_delay_unit.addItems(["毫秒", "秒", "分钟"])
+
+        # 单位切换逻辑与范围设置
+        def _on_loop_unit_change():
+            seconds = self._get_loop_delay_seconds_from_widgets()
+            u = self.loop_delay_unit.currentText()
+            if u == "毫秒":
+                self.loop_delay_spin.setDecimals(0)
+                self.loop_delay_spin.setRange(0, 3_600_000)
+                self.loop_delay_spin.setSuffix(" 毫秒")
+                self.loop_delay_spin.setValue(int(round(seconds * 1000.0)))
+            elif u == "秒":
+                self.loop_delay_spin.setDecimals(3)
+                self.loop_delay_spin.setRange(0.0, 3600.0)
+                self.loop_delay_spin.setSuffix(" 秒")
+                self.loop_delay_spin.setValue(seconds)
+            else:
+                self.loop_delay_spin.setDecimals(3)
+                self.loop_delay_spin.setRange(0.0, 60.0)
+                self.loop_delay_spin.setSuffix(" 分钟")
+                self.loop_delay_spin.setValue(seconds / 60.0)
+
+        self.loop_delay_unit.currentIndexChanged.connect(_on_loop_unit_change)
+        # 初始化（默认秒）
+        self.loop_delay_unit.setCurrentText("秒")
+        _on_loop_unit_change()
+
         loop_layout.addWidget(self.loop_delay_spin, 1)
+        loop_layout.addWidget(self.loop_delay_unit)
 
         task_info_layout.addLayout(loop_layout)
 
@@ -516,16 +700,18 @@ class MacroRecorderApp(QMainWindow):
         task_steps_layout.setSpacing(10)
 
         self.steps_tree = OceanTreeWidget()
-        self.steps_tree.setHeaderLabels(["启用", "步骤名称", "录制文件", "重复次数", "延迟(秒)"])
+        self.steps_tree.setHeaderLabels(["启用", "步骤名称", "录制文件", "重复次数", "延迟"])
         self.steps_tree.setColumnWidth(0, 60)
         self.steps_tree.setColumnWidth(1, 150)
         self.steps_tree.setColumnWidth(2, 200)
         self.steps_tree.setColumnWidth(3, 100)
-        self.steps_tree.setColumnWidth(4, 100)
+        self.steps_tree.setColumnWidth(4, 140)
 
         # 设置委托以允许编辑
+        # 第3列（重复次数）用原有 SpinBoxDelegate
         self.steps_tree.setItemDelegateForColumn(3, SpinBoxDelegate(self.steps_tree))
-        self.steps_tree.setItemDelegateForColumn(4, SpinBoxDelegate(self.steps_tree))
+        # 第4列（延迟）用新的 DelayUnitDelegate
+        self.steps_tree.setItemDelegateForColumn(4, DelayUnitDelegate(self.steps_tree))
 
         # 启用双击编辑
         self.steps_tree.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
@@ -889,7 +1075,7 @@ class MacroRecorderApp(QMainWindow):
             # 更新UI
             self.task_name_edit.setText(name)
             self.loop_spin.setValue(1)
-            self.loop_delay_spin.setValue(0)
+            self._set_loop_delay_seconds_to_widgets(0.0)
             self.steps_tree.clear()
 
             self.enable_task_editing()
@@ -903,7 +1089,7 @@ class MacroRecorderApp(QMainWindow):
             # 更新UI
             self.task_name_edit.setText(self.current_task.name)
             self.loop_spin.setValue(self.current_task.loop_count)
-            self.loop_delay_spin.setValue(self.current_task.loop_delay)
+            self._set_loop_delay_seconds_to_widgets(self.current_task.loop_delay)
 
             # 加载步骤
             self.steps_tree.clear()
@@ -921,7 +1107,7 @@ class MacroRecorderApp(QMainWindow):
         # 更新任务信息
         self.current_task.name = self.task_name_edit.text()
         self.current_task.loop_count = self.loop_spin.value()
-        self.current_task.loop_delay = self.loop_delay_spin.value()
+        self.current_task.loop_delay = self._get_loop_delay_seconds_from_widgets()
 
         # 更新任务列表
         for i in range(self.task_list_widget.count()):
@@ -1003,7 +1189,10 @@ class MacroRecorderApp(QMainWindow):
         item.setText(1, step.name)
         item.setText(2, os.path.basename(step.file_path))
         item.setText(3, str(step.repeat))
-        item.setText(4, str(step.delay))
+
+        # 延迟列：显示格式化文本，同时保存秒到 UserRole
+        item.setText(4, _format_duration_seconds(step.delay))
+        item.setData(4, Qt.UserRole, float(step.delay))
 
         # 添加启用复选框
         checkbox = QCheckBox()
@@ -1081,6 +1270,10 @@ class MacroRecorderApp(QMainWindow):
             QMessageBox.warning(self, "警告", "任务中没有可执行的步骤!")
             return
 
+        # 启动前，同步当前 UI 的循环次数与循环间隔（秒）
+        self.current_task.loop_count = self.loop_spin.value()
+        self.current_task.loop_delay = self._get_loop_delay_seconds_from_widgets()
+
         # 禁用运行按钮，启用停止按钮
         self.run_task_btn.setEnabled(False)
         self.stop_task_btn.setEnabled(True)
@@ -1138,7 +1331,7 @@ class MacroRecorderApp(QMainWindow):
                             time.sleep(step.delay)
 
                 # 循环间延迟
-                if loop_delay > 0 and current_loop < loop_count - 1:
+                if loop_delay > 0 and (loop_count == 0 or current_loop < loop_count - 1):
                     time.sleep(loop_delay)
 
                 current_loop += 1
@@ -1296,12 +1489,63 @@ class MacroRecorderApp(QMainWindow):
             except ValueError:
                 # 恢复原值
                 item.setText(3, str(step.repeat))
-        elif column == 4:  # 延迟时间
+        elif column == 4:  # 延迟时间（优先读 UserRole 的秒值）
+            seconds = item.data(4, Qt.UserRole)
+            if seconds is None:
+                seconds = _parse_display_to_seconds(item.text(4))
             try:
-                new_delay = float(item.text(4))
-                step.delay = new_delay
-            except ValueError:
-                item.setText(4, str(step.delay))
+                seconds = float(seconds)
+            except Exception:
+                seconds = step.delay  # fallback
+            seconds = max(0.0, seconds)
+            step.delay = seconds
+            # 确保显示与 UserRole 同步（防止外部直接编辑文本产生歧义）
+            item.setText(4, _format_duration_seconds(seconds))
+            item.setData(4, Qt.UserRole, seconds)
+
+    # ===== 工具：循环间隔 组合输入的换算 =====
+
+    def _get_loop_delay_seconds_from_widgets(self) -> float:
+        if not hasattr(self, "loop_delay_spin") or not hasattr(self, "loop_delay_unit"):
+            return 0.0
+        u = self.loop_delay_unit.currentText()
+        v = self.loop_delay_spin.value()
+        if u == "毫秒":
+            return float(v) / 1000.0
+        if u == "分钟":
+            return float(v) * 60.0
+        return float(v)
+
+    def _set_loop_delay_seconds_to_widgets(self, seconds: float):
+        try:
+            s = float(seconds)
+        except Exception:
+            s = 0.0
+        # 智能选择单位
+        if s < 1.0:
+            self.loop_delay_unit.setCurrentText("毫秒")
+        elif s >= 60.0 and abs((s / 60.0) - round(s / 60.0)) < 1e-3:
+            self.loop_delay_unit.setCurrentText("分钟")
+        else:
+            self.loop_delay_unit.setCurrentText("秒")
+        # 触发单位切换更新范围/小数/后缀并设置值
+        # 这里直接调用一次，确保 spin 的范围与单位一致
+        unit = self.loop_delay_unit.currentText()
+        if unit == "毫秒":
+            self.loop_delay_spin.setDecimals(0)
+            self.loop_delay_spin.setRange(0, 3_600_000)
+            self.loop_delay_spin.setSuffix(" 毫秒")
+            self.loop_delay_spin.setValue(int(round(s * 1000.0)))
+        elif unit == "秒":
+            self.loop_delay_spin.setDecimals(3)
+            self.loop_delay_spin.setRange(0.0, 3600.0)
+            self.loop_delay_spin.setSuffix(" 秒")
+            self.loop_delay_spin.setValue(s)
+        else:
+            self.loop_delay_spin.setDecimals(3)
+            self.loop_delay_spin.setRange(0.0, 60.0)
+            self.loop_delay_spin.setSuffix(" 分钟")
+            self.loop_delay_spin.setValue(s / 60.0)
 
 
 if __name__ == "__main__":
