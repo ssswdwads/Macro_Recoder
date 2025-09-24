@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QTreeWidget, QTreeWidgetItem, QGroupBox, QSpinBox, QCheckBox,
                              QSplitter, QLineEdit, QComboBox, QInputDialog, QStyledItemDelegate,
                              QDoubleSpinBox, QAbstractItemView, QFrame, QStyle)
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QSignalBlocker
 from PyQt5.QtGui import QIcon, QPixmap, QFont, QPalette, QColor, QBrush, QLinearGradient
 from pynput import keyboard
 
@@ -294,7 +294,7 @@ class OceanLabel(QLabel):
         """)
 
 
-# ===== 延迟单位工具与委托（在单文件中实现，无需改 delegates.py） =====
+# ===== 延迟单位工具与委托（内联） =====
 
 def _format_duration_seconds(seconds: float) -> str:
     """将秒的浮点值格式化为 毫秒/秒/分钟 文本"""
@@ -662,29 +662,45 @@ class MacroRecorderApp(QMainWindow):
         self.loop_delay_unit = QComboBox()
         self.loop_delay_unit.addItems(["毫秒", "秒", "分钟"])
 
-        # 单位切换逻辑与范围设置
+        # 记录上一次单位，避免用新单位误读旧值
+        self.loop_delay_prev_unit = "秒"
+
         def _on_loop_unit_change():
-            seconds = self._get_loop_delay_seconds_from_widgets()
-            u = self.loop_delay_unit.currentText()
-            if u == "毫秒":
+            # 用“旧单位”解释当前值 -> 秒
+            prev = self.loop_delay_prev_unit
+            new = self.loop_delay_unit.currentText()
+            v = self.loop_delay_spin.value()
+
+            if prev == "毫秒":
+                seconds = float(v) / 1000.0
+            elif prev == "分钟":
+                seconds = float(v) * 60.0
+            else:  # 秒
+                seconds = float(v)
+
+            # 配置新单位的范围/后缀，并将秒值转换为新单位值写回
+            if new == "毫秒":
                 self.loop_delay_spin.setDecimals(0)
-                self.loop_delay_spin.setRange(0, 3_600_000)
+                self.loop_delay_spin.setRange(0, 3_600_000)  # 0ms ~ 60min
                 self.loop_delay_spin.setSuffix(" 毫秒")
                 self.loop_delay_spin.setValue(int(round(seconds * 1000.0)))
-            elif u == "秒":
+            elif new == "秒":
                 self.loop_delay_spin.setDecimals(3)
-                self.loop_delay_spin.setRange(0.0, 3600.0)
+                self.loop_delay_spin.setRange(0.0, 3600.0)  # 0s ~ 60min
                 self.loop_delay_spin.setSuffix(" 秒")
                 self.loop_delay_spin.setValue(seconds)
-            else:
+            else:  # 分钟
                 self.loop_delay_spin.setDecimals(3)
-                self.loop_delay_spin.setRange(0.0, 60.0)
+                self.loop_delay_spin.setRange(0.0, 60.0)  # 0min ~ 60min
                 self.loop_delay_spin.setSuffix(" 分钟")
                 self.loop_delay_spin.setValue(seconds / 60.0)
+
+            self.loop_delay_prev_unit = new
 
         self.loop_delay_unit.currentIndexChanged.connect(_on_loop_unit_change)
         # 初始化（默认秒）
         self.loop_delay_unit.setCurrentText("秒")
+        self.loop_delay_prev_unit = "秒"
         _on_loop_unit_change()
 
         loop_layout.addWidget(self.loop_delay_spin, 1)
@@ -1131,21 +1147,21 @@ class MacroRecorderApp(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No
             )
 
-            if reply == QMessageBox.Yes:
-                # 从列表中移除
-                row = self.task_list_widget.row(current_item)
-                self.task_list_widget.takeItem(row)
+        if current_item and reply == QMessageBox.Yes:
+            # 从列表中移除
+            row = self.task_list_widget.row(current_item)
+            self.task_list_widget.takeItem(row)
 
-                # 从内存中删除
-                if task_name in self.tasks:
-                    del self.tasks[task_name]
+            # 从内存中删除
+            if task_name in self.tasks:
+                del self.tasks[task_name]
 
-                # 如果是当前任务，清空编辑区
-                if self.current_task and self.current_task.name == task_name:
-                    self.current_task = None
-                    self.disable_task_editing()
-                    self.task_name_edit.clear()
-                    self.steps_tree.clear()
+            # 如果是当前任务，清空编辑区
+            if self.current_task and self.current_task.name == task_name:
+                self.current_task = None
+                self.disable_task_editing()
+                self.task_name_edit.clear()
+                self.steps_tree.clear()
 
     def add_step(self):
         """添加新步骤到当前任务"""
@@ -1296,13 +1312,13 @@ class MacroRecorderApp(QMainWindow):
         self.task_thread.start()
 
     def execute_task(self):
-        """执行任务的线程函数"""
+        """执行任务的线程函数（循环间隔为“结束到开始”的固定间隔）"""
         try:
             self.current_task.is_running = True
             self.current_task.should_stop = False
 
             loop_count = self.current_task.loop_count
-            loop_delay = self.current_task.loop_delay
+            loop_delay = float(self.current_task.loop_delay)
 
             # 无限循环或有限循环
             current_loop = 0
@@ -1326,13 +1342,19 @@ class MacroRecorderApp(QMainWindow):
                         # 执行录制
                         self.recorder.play_recording()
 
-                        # 执行后延迟
+                        # 执行后延迟（仅在重复之间）
                         if step.delay > 0 and i < step.repeat - 1:
                             time.sleep(step.delay)
 
-                # 循环间延迟
+                # 循环间延迟（结束到开始：每轮执行完后，再等待完整的 loop_delay）
                 if loop_delay > 0 and (loop_count == 0 or current_loop < loop_count - 1):
-                    time.sleep(loop_delay)
+                    # 精确睡眠（抗抖动），但不扣除执行耗时
+                    target = time.monotonic() + loop_delay
+                    while not self.current_task.should_stop:
+                        remain = target - time.monotonic()
+                        if remain <= 0:
+                            break
+                        time.sleep(min(0.2, max(0.0, remain)))
 
                 current_loop += 1
 
@@ -1377,9 +1399,6 @@ class MacroRecorderApp(QMainWindow):
             "请输入录制名称:",
             text=f"录制_{time.strftime('%Y%m%d_%H%M%S')}"
         )
-
-        if ok and name:
-            self.save_recording(name)
 
     def on_task_finished(self):
         """任务完成后的UI更新"""
@@ -1521,16 +1540,21 @@ class MacroRecorderApp(QMainWindow):
             s = float(seconds)
         except Exception:
             s = 0.0
-        # 智能选择单位
+
+        # 选择合适的显示单位
         if s < 1.0:
-            self.loop_delay_unit.setCurrentText("毫秒")
+            unit = "毫秒"
         elif s >= 60.0 and abs((s / 60.0) - round(s / 60.0)) < 1e-3:
-            self.loop_delay_unit.setCurrentText("分钟")
+            unit = "分钟"
         else:
-            self.loop_delay_unit.setCurrentText("秒")
-        # 触发单位切换更新范围/小数/后缀并设置值
-        # 这里直接调用一次，确保 spin 的范围与单位一致
-        unit = self.loop_delay_unit.currentText()
+            unit = "秒"
+
+        # 阻断单位切换信号，避免在设置 currentText 时触发 _on_loop_unit_change 造成二次换算
+        with QSignalBlocker(self.loop_delay_unit):
+            self.loop_delay_unit.setCurrentText(unit)
+            self.loop_delay_prev_unit = unit  # 同步“上一次单位”
+
+        # 直接按目标单位配置范围/后缀并设置对应值
         if unit == "毫秒":
             self.loop_delay_spin.setDecimals(0)
             self.loop_delay_spin.setRange(0, 3_600_000)
