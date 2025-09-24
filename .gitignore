@@ -1,31 +1,93 @@
-# Byte-compiled / optimized files
+# ==== OS files ====
+.DS_Store
+Thumbs.db
+
+# ==== Python bytecode ====
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Virtual environments
-.venv/
-venv/
-env/
+# ==== C extensions ====
+*.so
+*.pyd
+*.dll
 
-# Packaging / build / PyInstaller
+# ==== Distribution / packaging ====
+.Python
 build/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
 *.egg-info/
-*.spec
+.installed.cfg
+*.egg
+MANIFEST
+pip-wheel-metadata/
 
-# IDE settings
-.idea/
-.vscode/
+# ==== Installer logs ====
+pip-log.txt
+pip-delete-this-directory.txt
 
-# OS
-.DS_Store
-Thumbs.db
+# ==== Unit test / coverage ====
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
 
-# Logs
+# ==== Type checking / analyzers ====
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# ==== Environments ====
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.local/
+
+# ==== Jupyter ====
+.ipynb_checkpoints/
+.ipython/
+profile_default/
+
+# ==== Logs ====
 *.log
+logs/
 
-# Project data (如果不想把这些录制数据纳入版本，请取消下面三行注释)
- recordings/
- recording.json
- tasks.json
+# ==== IDE / Editor ====
+.vscode/
+.idea/
+*.code-workspace
+
+# ==== Project-specific generated artifacts (do not commit) ====
+/custom_sequences/
+/recordings/
+/recording.json
+/tasks.json
+/build.spec/custom_sequences/
+/recordings/
+/recording.json
+/tasks.json
+/build.spec
