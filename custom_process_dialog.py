@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import (
     QLineEdit, QGroupBox, QTreeWidget, QTreeWidgetItem, QMessageBox, QFileDialog, QCheckBox
 )
 from PyQt5.QtGui import QIntValidator, QPalette, QColor, QBrush, QLinearGradient, QFont
-    # note: QBrush 已在上引入，不重复导入
 from PyQt5.QtCore import Qt
 
 from pynput import keyboard
@@ -15,13 +14,7 @@ from pynput.mouse import Listener as MouseListener
 
 class CustomProcessDialog(QDialog):
     """
-    自定义过程对话框（最小侵入 + 条件块 + 循环块）
-    - 基础动作：鼠标移动/点击/按下/释放、键盘按下/释放、等待
-    - 智能动作：OCR 点击、模板点击、滚动直到出现、等待文本
-    - 控制结构：
-        * 条件块(IF-OCR)：父块+子项，导出 smart_if_guard_ocr / smart_end_guard
-        * 条件循环(WHILE-OCR)：父块+子项，导出 smart_while_ocr（携带相对时序的子事件）
-        * “块结束(END-IF/END-WHILE)”为视觉标记子项，不导出额外事件
+    自定义过程（含：鼠标滚轮、智能动作、IF块、WHILE块）
     """
 
     def __init__(self, parent=None):
@@ -44,10 +37,11 @@ class CustomProcessDialog(QDialog):
         self.action_type = QComboBox()
         self.action_type.addItems([
             "鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动",
+            "鼠标滚轮",  # 新增
             "键盘按下", "键盘释放", "等待",
             # 智能
             "智能点击(OCR)", "智能点击(模板)", "智能滚动直到出现(OCR)", "智能等待文本(OCR)",
-            # 控制块（推荐用块）
+            # 控制块
             "条件块(IF-OCR)", "条件块结束(END-IF)",
             "条件循环(WHILE-OCR)", "循环块结束(END-WHILE)"
         ])
@@ -77,11 +71,25 @@ class CustomProcessDialog(QDialog):
         preset_layout.addWidget(QLabel("Y")); preset_layout.addWidget(self.y_edit)
         preset_layout.addWidget(self.btn_capture_pos)
 
+        # 新增：滚轮方向/刻度
+        self.wheel_dir = QComboBox()
+        self.wheel_dir.addItems(["上", "下"])  # 上=dy>0, 下=dy<0
+        self.wheel_amount = QSpinBox()
+        self.wheel_amount.setRange(1, 1000)
+        self.wheel_amount.setValue(1)
+        self.wheel_amount.setSuffix(" 刻度")
+        preset_layout.addWidget(QLabel("滚轮方向"))
+        preset_layout.addWidget(self.wheel_dir)
+        preset_layout.addWidget(QLabel("滚动"))
+        preset_layout.addWidget(self.wheel_amount)
+
         # 间隔与重复
         self.delay_ms = QSpinBox(); self.delay_ms.setRange(0, 1000000); self.delay_ms.setValue(0); self.delay_ms.setSuffix(" ms")
         self.repeat = QSpinBox(); self.repeat.setRange(1, 1000000); self.repeat.setValue(1)
-        preset_layout.addWidget(QLabel("间隔")); preset_layout.addWidget(self.delay_ms)
-        preset_layout.addWidget(QLabel("重复")); preset_layout.addWidget(self.repeat)
+        preset_layout.addWidget(QLabel("间隔"))
+        preset_layout.addWidget(self.delay_ms)
+        preset_layout.addWidget(QLabel("重复"))
+        preset_layout.addWidget(self.repeat)
 
         self.btn_add = QPushButton("添加到序列")
         self.btn_add.clicked.connect(self.add_action_to_list)
@@ -89,7 +97,7 @@ class CustomProcessDialog(QDialog):
 
         main_layout.addWidget(preset_box)
 
-        # 智能参数（作用于智能类型、IF块、WHILE块）
+        # 智能参数
         smart_box = QGroupBox("智能动作参数（OCR/模板/等待/滚动/IF/WHILE）")
         smart_layout = QHBoxLayout(smart_box)
         smart_layout.setContentsMargins(12, 12, 12, 12)
@@ -110,7 +118,7 @@ class CustomProcessDialog(QDialog):
         smart_layout.addWidget(QLabel("区域")); smart_layout.addWidget(self.region_edit, 2)
 
         self.smart_timeout_ms = QSpinBox(); self.smart_timeout_ms.setRange(0, 3_600_000); self.smart_timeout_ms.setValue(10000); self.smart_timeout_ms.setSuffix(" ms")
-        smart_layout.addWidget(QLabel("超时")); smart_layout.addWidget(self.smart_timeout_ms)
+        smart_layout.addWidget(QLabel("超时/最长时长")); smart_layout.addWidget(self.smart_timeout_ms)
 
         self.smart_require_green = QCheckBox("要求绿色命中（仅等待文本）")
         smart_layout.addWidget(self.smart_require_green)
@@ -146,7 +154,6 @@ class CustomProcessDialog(QDialog):
         self._pos_listener: Optional[MouseListener] = None
 
         self._apply_ocean_styles()
-
         self.action_type.currentTextChanged.connect(self._refresh_inputs)
         self._refresh_inputs()
 
@@ -177,13 +184,18 @@ class CustomProcessDialog(QDialog):
         t = self.action_type.currentText()
         need_button = t in ("鼠标点击", "鼠标按下", "鼠标释放")
         need_key = t in ("键盘按下", "键盘释放")
-        need_pos = t in ("鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动")
+        need_pos = t in ("鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动", "鼠标滚轮")
         is_smart = t in ("智能点击(OCR)", "智能点击(模板)", "智能滚动直到出现(OCR)", "智能等待文本(OCR)", "条件块(IF-OCR)", "条件循环(WHILE-OCR)")
 
         self.mouse_button.setEnabled(need_button)
         self.key_line.setEnabled(need_key); self.btn_capture_key.setEnabled(need_key)
         self.x_edit.setEnabled(need_pos); self.y_edit.setEnabled(need_pos); self.btn_capture_pos.setEnabled(need_pos)
 
+        # 滚轮控件
+        self.wheel_dir.setEnabled(t == "鼠标滚轮")
+        self.wheel_amount.setEnabled(t == "鼠标滚轮")
+
+        # 智能参数
         self.smart_keywords.setEnabled(is_smart)
         self.smart_template.setEnabled(t == "智能点击(模板)")
         self.smart_btn_template.setEnabled(t == "智能点击(模板)")
@@ -268,14 +280,14 @@ class CustomProcessDialog(QDialog):
         # 智能参数
         keywords = [k.strip() for k in self.smart_keywords.text().split("|") if k.strip()]
         region = self._parse_region(self.region_edit.text())
-        timeout_sec = max(0.0, self.smart_timeout_ms.value() / 1000.0)  # 作为智能点击/等待的超时；在 WHILE 中作为最长时长
+        timeout_sec = max(0.0, self.smart_timeout_ms.value() / 1000.0)
         require_green = bool(self.smart_require_green.isChecked())
         template_path = self.smart_template.text().strip()
 
         # 传统校验
         if t in ("键盘按下", "键盘释放") and not key:
             QMessageBox.warning(self, "提示", "请先捕获或输入键盘键"); return
-        if t in ("鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动"):
+        if t in ("鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动", "鼠标滚轮"):
             if not x or not y:
                 QMessageBox.warning(self, "提示", "请先填入或捕获坐标"); return
 
@@ -302,13 +314,22 @@ class CustomProcessDialog(QDialog):
             act["type"] = "mouse_release"; act["button"] = btn; act["pos"] = [int(x), int(y)]
             detail = f"{btn} 释放 ({x},{y})"
 
+        elif t == "鼠标滚轮":
+            # 方向 -> dy；上=正，下=负；dx 一般为 0
+            dy = int(self.wheel_amount.value())
+            if self.wheel_dir.currentText() == "下":
+                dy = -dy
+            act["type"] = "mouse_wheel"
+            act["pos"] = [int(x), int(y)]
+            act["dy"] = dy
+            act["dx"] = 0
+            detail = f"滚轮 {'上' if dy>0 else '下'} {abs(dy)} 刻度 @({x},{y})"
+
         elif t == "键盘按下":
-            act["type"] = "key_press"; act["key"] = key
-            detail = f"键盘按下 {key}"
+            act["type"] = "key_press"; act["key"] = key; detail = f"键盘按下 {key}"
 
         elif t == "键盘释放":
-            act["type"] = "key_release"; act["key"] = key
-            detail = f"键盘释放 {key}"
+            act["type"] = "key_release"; act["key"] = key; detail = f"键盘释放 {key}"
 
         # 智能
         elif t == "智能点击(OCR)":
@@ -349,24 +370,20 @@ class CustomProcessDialog(QDialog):
             detail = f"IF块(OCR) 关键词={ '|'.join(keywords) } 区域={region or '全屏'}（在此块下添加子操作）"
 
         elif t == "条件块结束(END-IF)":
-            act["type"] = "smart_if_block_end"
-            detail = "IF块结束（标记）"
+            act["type"] = "smart_if_block_end"; detail = "IF块结束（标记）"
 
-        # 控制块：WHILE（新）
+        # 控制块：WHILE
         elif t == "条件循环(WHILE-OCR)":
             if not keywords: QMessageBox.warning(self, "提示", "请填写关键词（如：下一节|Next|下一）"); return
             act["type"] = "smart_while_block_ocr"; act["keywords"] = keywords
             if region: act["region"] = region
-            act["interval"] = 0.3  # 条件检测周期（秒）
-            act["prefer_area"] = "bottom"
-            # 最长时长：用“超时(ms)”；最大循环次数：用“重复”作为上限
+            act["interval"] = 0.3; act["prefer_area"] = "bottom"
             act["max_duration"] = max(0.0, self.smart_timeout_ms.value() / 1000.0)
             act["max_loops"] = repeat
             detail = f"WHILE块(OCR) 直到命中 关键词={ '|'.join(keywords) } 区域={region or '全屏'} 周期=0.3s 最长={int(self.smart_timeout_ms.value())}ms 上限次数={repeat}（在此块下添加子操作）"
 
         elif t == "循环块结束(END-WHILE)":
-            act["type"] = "smart_while_block_end"
-            detail = "WHILE块结束（标记）"
+            act["type"] = "smart_while_block_end"; detail = "WHILE块结束（标记）"
 
         else:
             QMessageBox.warning(self, "错误", "未知类型"); return
@@ -383,19 +400,17 @@ class CustomProcessDialog(QDialog):
         ])
         item.setData(0, 0x0100, act)
 
-        # 插入位置：选中对应父块就作为子项，否则顶层
+        # 插入到对应父块下
         parent_if = self._selected_block_parent("smart_if_block_ocr")
         parent_while = self._selected_block_parent("smart_while_block_ocr")
 
-        # 结束标记必须在相应父块下
         if act.get("type") in ("smart_if_block_end", "smart_while_block_end"):
             parent = parent_if if act.get("type") == "smart_if_block_end" else parent_while
             if parent is None:
-                QMessageBox.warning(self, "提示", "请先选中一个对应的父块，再添加“块结束”标记。")
+                QMessageBox.warning(self, "提示", "请先选中对应的父块，再添加“块结束”标记。")
                 return
             parent.addChild(item); parent.setExpanded(True); return
 
-        # 普通插入逻辑
         if parent_if is not None and act.get("type") not in ("smart_if_block_ocr", "smart_while_block_ocr"):
             parent_if.addChild(item); parent_if.setExpanded(True)
         elif parent_while is not None and act.get("type") not in ("smart_if_block_ocr", "smart_while_block_ocr"):
@@ -403,7 +418,6 @@ class CustomProcessDialog(QDialog):
         else:
             self.tree.addTopLevelItem(item)
             if act.get("type") in ("smart_if_block_ocr", "smart_while_block_ocr"):
-                # 父块高亮
                 item.setForeground(0, QBrush(QColor(25, 118, 210)))
                 item.setForeground(6, QBrush(QColor(25, 118, 210)))
                 font = QFont(self.font()); font.setBold(True)
@@ -420,7 +434,7 @@ class CustomProcessDialog(QDialog):
                 if idx >= 0:
                     self.tree.takeTopLevelItem(idx)
 
-    # 递归导出：IF 块导出 start/end；WHILE 块导出一个 smart_while_ocr（包含相对时序子事件）
+    # 递归导出
     def build_recorded_events(self) -> Tuple[List[List[Any]], str]:
         events: List[List[Any]] = []
         t = 0.0
@@ -431,29 +445,25 @@ class CustomProcessDialog(QDialog):
                 tb += ms / 1000.0
             return tb
 
-        # 子事件（相对时序）导出器：返回新的 t_rel
+        # 导出 WHILE 子事件为相对时序
         def emit_child_rel(it: QTreeWidgetItem, t_rel: float, children_out: List[List[Any]]) -> float:
             act = it.data(0, 0x0100) or {}
             typ = act.get("type")
             delay_ms = int(act.get("delay_ms", 0))
             repeat = int(act.get("repeat", 1))
 
-            # 视觉标记直接忽略
             if typ in ("smart_if_block_end", "smart_while_block_end"):
                 return t_rel
 
-            # IF 块内的子项：为简化，直接把“IF start/children/end”顺序嵌入 children_out
             if typ == "smart_if_block_ocr":
                 t_rel = add_delay(t_rel, delay_ms)
                 payload = {k: act[k] for k in ("keywords", "region", "interval", "prefer_area") if k in act}
                 children_out.append(["smart_if_guard_ocr", payload, float(t_rel)])
-                # 递归其子项
                 for ci in range(it.childCount()):
                     t_rel = emit_child_rel(it.child(ci), t_rel, children_out)
                 children_out.append(["smart_end_guard", {}, float(t_rel)])
                 return t_rel
 
-            # 普通与智能事件（相对时间）
             for _ in range(max(1, repeat)):
                 t_rel = add_delay(t_rel, delay_ms)
                 if typ == "wait":
@@ -476,6 +486,10 @@ class CustomProcessDialog(QDialog):
                     btn = act.get("button", "left"); pos = act.get("pos")
                     if pos:
                         children_out.append(["mouse_release", btn, [int(pos[0]), int(pos[1])], float(t_rel)])
+                elif typ == "mouse_wheel":
+                    pos = act.get("pos"); dx = int(act.get("dx", 0)); dy = int(act.get("dy", 0))
+                    if pos:
+                        children_out.append(["mouse_scroll", [dx, dy], [int(pos[0]), int(pos[1])], float(t_rel)])
                 elif typ in ("key_press", "key_release"):
                     key = act.get("key", "")
                     if key:
@@ -507,7 +521,7 @@ class CustomProcessDialog(QDialog):
                     t_base = t_child
                 return t_base
 
-            # WHILE 块（父）：导出为一个 smart_while_ocr 事件（children 使用相对时间）
+            # WHILE 块（父）
             if typ == "smart_while_block_ocr":
                 for _ in range(max(1, repeat)):
                     t1 = add_delay(t_base, delay_ms)
@@ -528,14 +542,14 @@ class CustomProcessDialog(QDialog):
                         "children": children_rel
                     }
                     events.append(["smart_while_ocr", payload, float(t1)])
-                    t_base = t1  # 后续时间轴不人为增加，由回放实际时长决定
+                    t_base = t1
                 return t_base
 
-            # “块结束”标记：不导出
+            # 结束标记：忽略
             if typ in ("smart_if_block_end", "smart_while_block_end"):
                 return t_base
 
-            # 普通与智能（顶层）
+            # 常规与智能（顶层）
             if typ == "wait":
                 return add_delay(t_base, delay_ms)
             elif typ == "mouse_move":
@@ -567,6 +581,13 @@ class CustomProcessDialog(QDialog):
                     for _ in range(max(1, repeat)):
                         t_base = add_delay(t_base, delay_ms)
                         events.append(["mouse_release", btn, [int(pos[0]), int(pos[1])], float(t_base)])
+                return t_base
+            elif typ == "mouse_wheel":
+                pos = act.get("pos"); dx = int(act.get("dx", 0)); dy = int(act.get("dy", 0))
+                if pos:
+                    for _ in range(max(1, repeat)):
+                        t_base = add_delay(t_base, delay_ms)
+                        events.append(["mouse_scroll", [dx, dy], [int(pos[0]), int(pos[1])], float(t_base)])
                 return t_base
             elif typ in ("key_press", "key_release"):
                 key = act.get("key", "")
