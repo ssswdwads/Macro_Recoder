@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox, QSpinBox,
-    QLineEdit, QGroupBox, QTreeWidget, QTreeWidgetItem, QMessageBox
+    QLineEdit, QGroupBox, QTreeWidget, QTreeWidgetItem, QMessageBox, QFileDialog, QCheckBox
 )
 from PyQt5.QtGui import QIntValidator, QPalette, QColor, QBrush, QLinearGradient, QFont
 from PyQt5.QtCore import Qt
@@ -19,13 +19,15 @@ class CustomProcessDialog(QDialog):
     - 支持捕获坐标、捕获按键
     - 支持每步间隔（毫秒）、重复次数
     - 导出与录制一致的“基于时间戳”的事件列表（数组形式）
+    - 新增：智能动作（OCR/模板/滚动/等待/静音），输出 smart_* 事件
+    - 新增：IF 守护（条件开始/条件结束），在执行一段动作时周期识别命中即跳出
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("CustomProcessDialog")
         self.setWindowTitle("自定义过程")
-        self.resize(860, 600)
+        self.resize(960, 660)
 
         # 海洋风格背景（与主窗体一致的蓝白渐变）
         self._apply_ocean_background()
@@ -40,7 +42,14 @@ class CustomProcessDialog(QDialog):
         preset_layout.setSpacing(8)
 
         self.action_type = QComboBox()
-        self.action_type.addItems(["鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动", "键盘按下", "键盘释放", "等待"])
+        self.action_type.addItems([
+            "鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动",
+            "键盘按下", "键盘释放", "等待",
+            # 新增智能类型
+            "智能点击(OCR)", "智能点击(模板)", "智能滚动直到出现(OCR)", "智能等待文本(OCR)", "设置静音",
+            # 新增：控制结构（IF 守护）
+            "条件开始(IF-OCR)", "条件结束(END-IF)"
+        ])
         preset_layout.addWidget(QLabel("类型"))
         preset_layout.addWidget(self.action_type)
 
@@ -91,6 +100,42 @@ class CustomProcessDialog(QDialog):
 
         main_layout.addWidget(preset_box)
 
+        # 智能参数区域（仅当选择智能类型或 IF-OCR 时启用）
+        smart_box = QGroupBox("智能动作参数（OCR/模板/等待/滚动/IF）")
+        smart_layout = QHBoxLayout(smart_box)
+        smart_layout.setContentsMargins(12, 12, 12, 12)
+        smart_layout.setSpacing(8)
+
+        self.smart_keywords = QLineEdit()
+        self.smart_keywords.setPlaceholderText("关键词，用 | 分隔，如：下一节|Next|下一 / 已完成|完成|Done")
+        smart_layout.addWidget(QLabel("关键词"))
+        smart_layout.addWidget(self.smart_keywords, 2)
+
+        self.smart_template = QLineEdit()
+        self.smart_template.setPlaceholderText("模板图片路径（用于模板匹配）")
+        self.smart_btn_template = QPushButton("选择模板")
+        self.smart_btn_template.clicked.connect(self._choose_template)
+        smart_layout.addWidget(QLabel("模板"))
+        smart_layout.addWidget(self.smart_template, 2)
+        smart_layout.addWidget(self.smart_btn_template)
+
+        self.region_edit = QLineEdit()
+        self.region_edit.setPlaceholderText("搜索区域：left,top,width,height（可留空=全屏）")
+        smart_layout.addWidget(QLabel("区域"))
+        smart_layout.addWidget(self.region_edit, 2)
+
+        self.smart_timeout_ms = QSpinBox()
+        self.smart_timeout_ms.setRange(0, 3_600_000)
+        self.smart_timeout_ms.setValue(10000)
+        self.smart_timeout_ms.setSuffix(" ms")
+        smart_layout.addWidget(QLabel("超时"))
+        smart_layout.addWidget(self.smart_timeout_ms)
+
+        self.smart_require_green = QCheckBox("要求绿色命中（仅等待文本）")
+        smart_layout.addWidget(self.smart_require_green)
+
+        main_layout.addWidget(smart_box)
+
         # 序列列表
         self.tree = QTreeWidget()
         self.tree.setColumnCount(7)
@@ -98,10 +143,10 @@ class CustomProcessDialog(QDialog):
         self.tree.setAlternatingRowColors(True)
         self.tree.setRootIsDecorated(False)
         self.tree.setUniformRowHeights(True)
-        self.tree.setColumnWidth(0, 90)
-        self.tree.setColumnWidth(1, 100)
-        self.tree.setColumnWidth(2, 70)
-        self.tree.setColumnWidth(3, 70)
+        self.tree.setColumnWidth(0, 130)
+        self.tree.setColumnWidth(1, 120)
+        self.tree.setColumnWidth(2, 80)
+        self.tree.setColumnWidth(3, 80)
         self.tree.setColumnWidth(4, 90)
         self.tree.setColumnWidth(5, 70)
         main_layout.addWidget(self.tree, 1)
@@ -137,6 +182,10 @@ class CustomProcessDialog(QDialog):
         # 事件
         self.action_type.currentTextChanged.connect(self._refresh_inputs)
         self._refresh_inputs()
+
+        # 一些默认值（贴合你的页面）
+        self.smart_keywords.setText("下一节|Next|下一")
+        # 等待“已完成”时可改：已完成|完成|Done
 
     def _apply_ocean_background(self):
         palette = self.palette()
@@ -307,6 +356,7 @@ class CustomProcessDialog(QDialog):
         need_button = t in ("鼠标点击", "鼠标按下", "鼠标释放")
         need_key = t in ("键盘按下", "键盘释放")
         need_pos = t in ("鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动")
+        is_smart = t in ("智能点击(OCR)", "智能点击(模板)", "智能滚动直到出现(OCR)", "智能等待文本(OCR)", "设置静音", "条件开始(IF-OCR)")
 
         self.mouse_button.setEnabled(need_button)
         self.key_line.setEnabled(need_key)
@@ -315,6 +365,14 @@ class CustomProcessDialog(QDialog):
         self.y_edit.setEnabled(need_pos)
         self.btn_capture_pos.setEnabled(need_pos)
 
+        # 智能参数可见性
+        self.smart_keywords.setEnabled(is_smart)
+        self.smart_template.setEnabled(t == "智能点击(模板)")
+        self.smart_btn_template.setEnabled(t == "智能点击(模板)")
+        self.region_edit.setEnabled(is_smart)
+        self.smart_timeout_ms.setEnabled(t in ("智能点击(OCR)", "智能等待文本(OCR)"))
+        self.smart_require_green.setEnabled(t == "智能等待文本(OCR)")
+
         if t == "等待":
             self.mouse_button.setEnabled(False)
             self.key_line.setEnabled(False)
@@ -322,6 +380,24 @@ class CustomProcessDialog(QDialog):
             self.x_edit.setEnabled(False)
             self.y_edit.setEnabled(False)
             self.btn_capture_pos.setEnabled(False)
+
+    def _choose_template(self):
+        path, _ = QFileDialog.getOpenFileName(self, "选择模板图片", "", "图片 (*.png *.jpg *.jpeg *.bmp)")
+        if path:
+            self.smart_template.setText(path)
+
+    def _parse_region(self, s: str) -> Optional[List[int]]:
+        s = (s or "").strip()
+        if not s:
+            return None
+        try:
+            parts = [int(p.strip()) for p in s.split(",")]
+            if len(parts) != 4:
+                raise ValueError
+            return parts
+        except Exception:
+            QMessageBox.warning(self, "区域格式错误", "区域应为 left,top,width,height（整数）或留空。")
+            return None
 
     def capture_key_once(self):
         self.key_line.setText("")
@@ -384,6 +460,14 @@ class CustomProcessDialog(QDialog):
         x = self.x_edit.text().strip()
         y = self.y_edit.text().strip()
 
+        # 智能参数
+        keywords = [k.strip() for k in self.smart_keywords.text().split("|") if k.strip()]
+        region = self._parse_region(self.region_edit.text())
+        timeout_sec = max(0.0, self.smart_timeout_ms.value() / 1000.0)
+        require_green = bool(self.smart_require_green.isChecked())
+        template_path = self.smart_template.text().strip()
+
+        # 传统校验
         if t in ("键盘按下", "键盘释放") and not key:
             QMessageBox.warning(self, "提示", "请先捕获或输入键盘键")
             return
@@ -393,6 +477,8 @@ class CustomProcessDialog(QDialog):
                 return
 
         act: Dict[str, Any] = {"delay_ms": delay_ms, "repeat": repeat}
+        detail = ""
+
         if t == "等待":
             act["type"] = "wait"
             detail = f"等待 {delay_ms}ms"
@@ -423,6 +509,71 @@ class CustomProcessDialog(QDialog):
             act["type"] = "key_release"
             act["key"] = key
             detail = f"键盘释放 {key}"
+        # 智能类型
+        elif t == "智能点击(OCR)":
+            if not keywords:
+                QMessageBox.warning(self, "提示", "请填写关键词，例如：下一节|Next")
+                return
+            act["type"] = "smart_click_ocr"
+            act["keywords"] = keywords
+            if region:
+                act["region"] = region
+            act["timeout"] = timeout_sec
+            act["prefer_area"] = "bottom-right"
+            detail = f"OCR点击 关键词={ '|'.join(keywords) } 区域={region or '全屏'} 超时={int(timeout_sec*1000)}ms"
+        elif t == "智能点击(模板)":
+            if not template_path:
+                QMessageBox.warning(self, "提示", "请选择模板图片")
+                return
+            act["type"] = "smart_click_template"
+            act["template_path"] = template_path
+            if region:
+                act["region"] = region
+            act["threshold"] = 0.84
+            detail = f"模板点击 模板={template_path} 区域={region or '全屏'} 阈值=0.84"
+        elif t == "智能滚动直到出现(OCR)":
+            if not keywords:
+                QMessageBox.warning(self, "提示", "请填写关键词，例如：下一节|Next")
+                return
+            act["type"] = "smart_scroll_until_text"
+            act["keywords"] = keywords
+            act["max_scrolls"] = 8
+            act["step"] = -600  # 负数向下
+            if region:
+                act["region"] = region
+            act["prefer_area"] = "bottom"
+            detail = f"滚动直到出现 关键词={ '|'.join(keywords) } 次数=8 步长=-600"
+        elif t == "智能等待文本(OCR)":
+            if not keywords:
+                QMessageBox.warning(self, "提示", "请填写等待的关键词，例如：已完成|完成")
+                return
+            act["type"] = "smart_wait_text"
+            act["keywords"] = keywords
+            if region:
+                act["region"] = region
+            act["timeout"] = max(1.0, timeout_sec)
+            act["require_green"] = require_green
+            detail = f"等待文本 关键词={ '|'.join(keywords) } 区域={region or '全屏'} 超时={int(timeout_sec*1000)}ms 绿色={require_green}"
+        elif t == "设置静音":
+            act["type"] = "smart_mute"
+            act["strategy"] = "press_m"
+            detail = "静音（按 m）"
+        # 新增：IF 守护控制结构（最小改动）
+        elif t == "条件开始(IF-OCR)":
+            if not keywords:
+                QMessageBox.warning(self, "提示", "请填写关键词（如：下一节|Next|下一）")
+                return
+            act["type"] = "smart_if_guard_ocr"
+            act["keywords"] = keywords
+            if region:
+                act["region"] = region
+            # 守护检查周期（秒），用固定 0.3；如果你希望可配，我可以把它挪到 UI
+            act["interval"] = 0.3
+            act["prefer_area"] = "bottom"  # “下一节”多出现在下方
+            detail = f"IF开始(OCR) 命中即跳出 关键词={ '|'.join(keywords) } 区域={region or '全屏'}"
+        elif t == "条件结束(END-IF)":
+            act["type"] = "smart_end_guard"
+            detail = "END-IF"
         else:
             QMessageBox.warning(self, "错误", "未知类型")
             return
@@ -448,7 +599,7 @@ class CustomProcessDialog(QDialog):
     def build_recorded_events(self) -> Tuple[List[List[Any]], str]:
         """
         返回 (events, default_name)
-        events: 形如 [["mouse_press","left",[x,y],t], ...]
+        events: 形如 [["mouse_press","left",[x,y],t], ...] 或 ["smart_xxx",{payload},t]
         default_name: 默认文件名
         """
         events: List[List[Any]] = []
@@ -497,6 +648,11 @@ class CustomProcessDialog(QDialog):
                     key = act.get("key", "")
                     if key:
                         events.append(["key_release", str(key), float(t)])
+                # 新增：smart_* 事件，直接把参数打包为 payload（包含 IF/END-IF）
+                elif isinstance(typ, str) and typ.startswith("smart_"):
+                    payload_keys = [k for k in act.keys() if k not in ("type", "delay_ms", "repeat")]
+                    payload = {k: act[k] for k in payload_keys}
+                    events.append([typ, payload, float(t)])
 
         default_name = time.strftime("custom_%Y%m%d_%H%M%S.json")
         return events, default_name
