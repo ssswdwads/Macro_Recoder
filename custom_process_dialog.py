@@ -14,13 +14,11 @@ from pynput.mouse import Listener as MouseListener
 
 class CustomProcessDialog(QDialog):
     """
-    自定义过程对话框（最小侵入）
-    - 可添加：鼠标移动、鼠标点击/按下/释放、键盘按下/释放、等待
-    - 支持捕获坐标、捕获按键
-    - 支持每步间隔（毫秒）、重复次数
-    - 导出与录制一致的“基于时间戳”的事件列表（数组形式）
-    - 新增：智能动作（OCR/模板/滚动/等待/静音），输出 smart_* 事件
-    - 新增：IF 守护（条件开始/条件结束），在执行一段动作时周期识别命中即跳出
+    自定义过程对话框（最小侵入 + 条件块）
+    - 基础动作：鼠标移动/点击/按下/释放、键盘按下/释放、等待
+    - 智能动作：OCR 点击、模板点击、滚动直到出现、等待文本、静音
+    - 控制结构：条件开始/结束（兼容）、条件块(IF-OCR)（推荐）
+    - 导出为“基于时间戳”的事件列表，与录制一致
     """
 
     def __init__(self, parent=None):
@@ -29,13 +27,13 @@ class CustomProcessDialog(QDialog):
         self.setWindowTitle("自定义过程")
         self.resize(960, 660)
 
-        # 海洋风格背景（与主窗体一致的蓝白渐变）
+        # 背景
         self._apply_ocean_background()
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(12)
 
-        # 预设动作选择
+        # 预设动作区
         preset_box = QGroupBox("添加动作")
         preset_layout = QHBoxLayout(preset_box)
         preset_layout.setContentsMargins(12, 12, 12, 12)
@@ -45,10 +43,12 @@ class CustomProcessDialog(QDialog):
         self.action_type.addItems([
             "鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动",
             "键盘按下", "键盘释放", "等待",
-            # 新增智能类型
+            # 智能
             "智能点击(OCR)", "智能点击(模板)", "智能滚动直到出现(OCR)", "智能等待文本(OCR)", "设置静音",
-            # 新增：控制结构（IF 守护）
-            "条件开始(IF-OCR)", "条件结束(END-IF)"
+            # 控制（兼容旧）
+            "条件开始(IF-OCR)", "条件结束(END-IF)",
+            # 新：条件块（推荐）
+            "条件块(IF-OCR)"
         ])
         preset_layout.addWidget(QLabel("类型"))
         preset_layout.addWidget(self.action_type)
@@ -81,7 +81,7 @@ class CustomProcessDialog(QDialog):
         preset_layout.addWidget(self.y_edit)
         preset_layout.addWidget(self.btn_capture_pos)
 
-        # 延迟与重复
+        # 间隔与重复
         self.delay_ms = QSpinBox()
         self.delay_ms.setRange(0, 1000000)
         self.delay_ms.setValue(0)
@@ -100,7 +100,7 @@ class CustomProcessDialog(QDialog):
 
         main_layout.addWidget(preset_box)
 
-        # 智能参数区域（仅当选择智能类型或 IF-OCR 时启用）
+        # 智能参数区（智能类型与 IF-OCR 生效）
         smart_box = QGroupBox("智能动作参数（OCR/模板/等待/滚动/IF）")
         smart_layout = QHBoxLayout(smart_box)
         smart_layout.setContentsMargins(12, 12, 12, 12)
@@ -136,14 +136,14 @@ class CustomProcessDialog(QDialog):
 
         main_layout.addWidget(smart_box)
 
-        # 序列列表
+        # 列表
         self.tree = QTreeWidget()
         self.tree.setColumnCount(7)
         self.tree.setHeaderLabels(["类型", "按钮/键", "X", "Y", "间隔(ms)", "重复", "详情"])
         self.tree.setAlternatingRowColors(True)
-        self.tree.setRootIsDecorated(False)
+        self.tree.setRootIsDecorated(True)  # 允许分层
         self.tree.setUniformRowHeights(True)
-        self.tree.setColumnWidth(0, 130)
+        self.tree.setColumnWidth(0, 160)
         self.tree.setColumnWidth(1, 120)
         self.tree.setColumnWidth(2, 80)
         self.tree.setColumnWidth(3, 80)
@@ -151,7 +151,7 @@ class CustomProcessDialog(QDialog):
         self.tree.setColumnWidth(5, 70)
         main_layout.addWidget(self.tree, 1)
 
-        # 底部操作
+        # 底部
         bottom_layout = QHBoxLayout()
         bottom_layout.setSpacing(10)
 
@@ -176,16 +176,15 @@ class CustomProcessDialog(QDialog):
         # 状态
         self._pos_listener: Optional[MouseListener] = None
 
-        # 海洋风格统一样式
+        # 样式
         self._apply_ocean_styles()
 
         # 事件
         self.action_type.currentTextChanged.connect(self._refresh_inputs)
         self._refresh_inputs()
 
-        # 一些默认值（贴合你的页面）
+        # 默认值
         self.smart_keywords.setText("下一节|Next|下一")
-        # 等待“已完成”时可改：已完成|完成|Done
 
     def _apply_ocean_background(self):
         palette = self.palette()
@@ -196,12 +195,8 @@ class CustomProcessDialog(QDialog):
         self.setPalette(palette)
 
     def _apply_ocean_styles(self):
-        # 统一字体（与主界面接近）
         self.setFont(QFont("Microsoft YaHei UI", 9))
-
-        # 统一样式表（参考 main_window 的海洋风格）
         self.setStyleSheet("""
-            /* 分组框 */
             QGroupBox {
                 background-color: #f0f8ff;
                 border: 2px solid #64b5f6;
@@ -218,15 +213,11 @@ class CustomProcessDialog(QDialog):
                 background-color: #f0f8ff;
                 border-radius: 5px;
             }
-
-            /* 标签 */
             QLabel {
                 color: #1976d2;
                 font-weight: bold;
                 font-size: 12px;
             }
-
-            /* 文本框 */
             QLineEdit {
                 background-color: #f0f8ff;
                 border: 2px solid #64b5f6;
@@ -239,8 +230,6 @@ class CustomProcessDialog(QDialog):
                 border: 2px solid #42a5f5;
                 background-color: #e3f2fd;
             }
-
-            /* 下拉框 */
             QComboBox {
                 background-color: #f0f8ff;
                 border: 2px solid #64b5f6;
@@ -255,8 +244,6 @@ class CustomProcessDialog(QDialog):
                 selection-background-color: #e3f2fd;
                 selection-color: #1976d2;
             }
-
-            /* 数值框 */
             QSpinBox {
                 background-color: #f0f8ff;
                 border: 2px solid #64b5f6;
@@ -275,8 +262,6 @@ class CustomProcessDialog(QDialog):
                 width: 18px;
                 border-left: 1px solid #42a5f5;
             }
-
-            /* 按钮 */
             QPushButton {
                 background-color: #64b5f6;
                 color: white;
@@ -286,18 +271,9 @@ class CustomProcessDialog(QDialog):
                 font-weight: bold;
                 font-size: 12px;
             }
-            QPushButton:hover {
-                background-color: #42a5f5;
-            }
-            QPushButton:pressed {
-                background-color: #1976d2;
-            }
-            QPushButton:disabled {
-                background-color: #d3d3d3;
-                color: #a0a0a0;
-            }
-
-            /* 树控件 */
+            QPushButton:hover { background-color: #42a5f5; }
+            QPushButton:pressed { background-color: #1976d2; }
+            QPushButton:disabled { background-color: #d3d3d3; color: #a0a0a0; }
             QTreeWidget {
                 background-color: #f0f8ff;
                 border: 2px solid #64b5f6;
@@ -321,42 +297,15 @@ class CustomProcessDialog(QDialog):
                 border: 1px solid #42a5f5;
                 border-radius: 5px;
             }
-
-            /* 滚动条（与主界面保持一致的简化版） */
-            QScrollBar:vertical {
-                border: none;
-                background: #e3f2fd;
-                width: 12px;
-                margin: 0px;
-            }
-            QScrollBar::handle:vertical {
-                background: #64b5f6;
-                min-height: 20px;
-                border-radius: 5px;
-            }
-            QScrollBar:horizontal {
-                border: none;
-                background: #e3f2fd;
-                height: 12px;
-                margin: 0px;
-            }
-            QScrollBar::handle:horizontal {
-                background: #64b5f6;
-                min-width: 20px;
-                border-radius: 5px;
-            }
         """)
-
-        # 细节优化：标题字体略大一点
-        self.setWindowTitle(self.windowTitle())
-        self.setFont(self.font())
 
     def _refresh_inputs(self):
         t = self.action_type.currentText()
         need_button = t in ("鼠标点击", "鼠标按下", "鼠标释放")
         need_key = t in ("键盘按下", "键盘释放")
         need_pos = t in ("鼠标点击", "鼠标按下", "鼠标释放", "鼠标移动")
-        is_smart = t in ("智能点击(OCR)", "智能点击(模板)", "智能滚动直到出现(OCR)", "智能等待文本(OCR)", "设置静音", "条件开始(IF-OCR)")
+        is_smart = t in ("智能点击(OCR)", "智能点击(模板)", "智能滚动直到出现(OCR)", "智能等待文本(OCR)", "设置静音",
+                         "条件开始(IF-OCR)", "条件块(IF-OCR)")
 
         self.mouse_button.setEnabled(need_button)
         self.key_line.setEnabled(need_key)
@@ -365,7 +314,7 @@ class CustomProcessDialog(QDialog):
         self.y_edit.setEnabled(need_pos)
         self.btn_capture_pos.setEnabled(need_pos)
 
-        # 智能参数可见性
+        # 智能参数
         self.smart_keywords.setEnabled(is_smart)
         self.smart_template.setEnabled(t == "智能点击(模板)")
         self.smart_btn_template.setEnabled(t == "智能点击(模板)")
@@ -450,6 +399,17 @@ class CustomProcessDialog(QDialog):
         self._pos_listener.start()
         QMessageBox.information(self, "捕获坐标", "已开始监听。请在目标位置点击一次。")
 
+    def _selected_if_block_parent(self) -> Optional[QTreeWidgetItem]:
+        """若当前选中的是“条件块(IF-OCR)”父节点，则返回它；否则 None"""
+        sels = self.tree.selectedItems()
+        if not sels:
+            return None
+        it = sels[0]
+        act = it.data(0, 0x0100) or {}
+        if act.get("type") == "smart_if_block_ocr":
+            return it
+        return None
+
     def add_action_to_list(self):
         t = self.action_type.currentText()
         delay_ms = self.delay_ms.value()
@@ -479,6 +439,7 @@ class CustomProcessDialog(QDialog):
         act: Dict[str, Any] = {"delay_ms": delay_ms, "repeat": repeat}
         detail = ""
 
+        # 基础类型
         if t == "等待":
             act["type"] = "wait"
             detail = f"等待 {delay_ms}ms"
@@ -509,6 +470,7 @@ class CustomProcessDialog(QDialog):
             act["type"] = "key_release"
             act["key"] = key
             detail = f"键盘释放 {key}"
+
         # 智能类型
         elif t == "智能点击(OCR)":
             if not keywords:
@@ -538,7 +500,7 @@ class CustomProcessDialog(QDialog):
             act["type"] = "smart_scroll_until_text"
             act["keywords"] = keywords
             act["max_scrolls"] = 8
-            act["step"] = -600  # 负数向下
+            act["step"] = -600
             if region:
                 act["region"] = region
             act["prefer_area"] = "bottom"
@@ -558,7 +520,8 @@ class CustomProcessDialog(QDialog):
             act["type"] = "smart_mute"
             act["strategy"] = "press_m"
             detail = "静音（按 m）"
-        # 新增：IF 守护控制结构（最小改动）
+
+        # 兼容：IF 起止（保留）
         elif t == "条件开始(IF-OCR)":
             if not keywords:
                 QMessageBox.warning(self, "提示", "请填写关键词（如：下一节|Next|下一）")
@@ -567,17 +530,30 @@ class CustomProcessDialog(QDialog):
             act["keywords"] = keywords
             if region:
                 act["region"] = region
-            # 守护检查周期（秒），用固定 0.3；如果你希望可配，我可以把它挪到 UI
             act["interval"] = 0.3
-            act["prefer_area"] = "bottom"  # “下一节”多出现在下方
+            act["prefer_area"] = "bottom"
             detail = f"IF开始(OCR) 命中即跳出 关键词={ '|'.join(keywords) } 区域={region or '全屏'}"
         elif t == "条件结束(END-IF)":
             act["type"] = "smart_end_guard"
             detail = "END-IF"
+
+        # 新：条件块（父节点，可包含子项）
+        elif t == "条件块(IF-OCR)":
+            if not keywords:
+                QMessageBox.warning(self, "提示", "请填写关键词（如：下一节|Next|下一）")
+                return
+            act["type"] = "smart_if_block_ocr"
+            act["keywords"] = keywords
+            if region:
+                act["region"] = region
+            act["interval"] = 0.3
+            act["prefer_area"] = "bottom"
+            detail = f"IF块(OCR) 关键词={ '|'.join(keywords) } 区域={region or '全屏'}（在此块下添加子操作）"
         else:
             QMessageBox.warning(self, "错误", "未知类型")
             return
 
+        # 构造树项
         item = QTreeWidgetItem([
             t,
             act.get("button", act.get("key", "")),
@@ -587,72 +563,128 @@ class CustomProcessDialog(QDialog):
             str(repeat),
             detail
         ])
-        item.setData(0, 0x0100, act)  # Qt.UserRole
-        self.tree.addTopLevelItem(item)
+        item.setData(0, 0x0100, act)
+
+        # 插入位置：若选中 IF 块父节点，则作为其子项；否则顶层
+        parent_block = self._selected_if_block_parent()
+        if parent_block is not None and act.get("type") != "smart_if_block_ocr":
+            parent_block.addChild(item)
+            parent_block.setExpanded(True)
+        else:
+            # IF 块自身或普通事件都加到顶层
+            self.tree.addTopLevelItem(item)
+            # IF 块项高亮显示，便于辨识
+            if act.get("type") == "smart_if_block_ocr":
+                item.setForeground(0, QBrush(QColor(25, 118, 210)))
+                item.setForeground(6, QBrush(QColor(25, 118, 210)))
+                font = QFont(self.font()); font.setBold(True)
+                item.setFont(0, font)
+                item.setExpanded(True)
 
     def remove_selected(self):
         for it in self.tree.selectedItems():
-            idx = self.tree.indexOfTopLevelItem(it)
-            if idx >= 0:
-                self.tree.takeTopLevelItem(idx)
+            # 既支持删除父块（连同子项），也支持删除单个子项
+            parent = it.parent()
+            if parent is not None:
+                parent.removeChild(it)
+            else:
+                idx = self.tree.indexOfTopLevelItem(it)
+                if idx >= 0:
+                    self.tree.takeTopLevelItem(idx)
 
+    # 递归导出：遇到 IF-块父节点 -> 输出 start，递归导出子项 -> 输出 end
     def build_recorded_events(self) -> Tuple[List[List[Any]], str]:
-        """
-        返回 (events, default_name)
-        events: 形如 [["mouse_press","left",[x,y],t], ...] 或 ["smart_xxx",{payload},t]
-        default_name: 默认文件名
-        """
         events: List[List[Any]] = []
         t = 0.0
-        dt_click = 0.001  # 鼠标点击按下-释放间隔
+        dt_click = 0.001
 
-        for i in range(self.tree.topLevelItemCount()):
-            it = self.tree.topLevelItem(i)
+        def emit_item(it: QTreeWidgetItem, t_base: float) -> float:
             act = it.data(0, 0x0100) or {}
+            typ = act.get("type")
             delay_ms = int(act.get("delay_ms", 0))
             repeat = int(act.get("repeat", 1))
 
-            for _ in range(max(1, repeat)):
-                if delay_ms > 0:
-                    t += delay_ms / 1000.0
+            # 工具函数
+            def add_delay(tb: float, ms: int) -> float:
+                if ms > 0:
+                    tb += ms / 1000.0
+                return tb
 
-                typ = act.get("type")
-                if typ == "wait":
-                    continue
-                elif typ == "mouse_move":
-                    pos = act.get("pos")
-                    if pos:
-                        events.append(["mouse_move", [int(pos[0]), int(pos[1])], float(t)])
-                elif typ == "mouse_click":
-                    btn = act.get("button", "left")
-                    pos = act.get("pos")
-                    if pos:
-                        events.append(["mouse_press", btn, [int(pos[0]), int(pos[1])], float(t)])
-                        events.append(["mouse_release", btn, [int(pos[0]), int(pos[1])], float(t + dt_click)])
-                        t += dt_click
-                elif typ == "mouse_press":
-                    btn = act.get("button", "left")
-                    pos = act.get("pos")
-                    if pos:
-                        events.append(["mouse_press", btn, [int(pos[0]), int(pos[1])], float(t)])
-                elif typ == "mouse_release":
-                    btn = act.get("button", "left")
-                    pos = act.get("pos")
-                    if pos:
-                        events.append(["mouse_release", btn, [int(pos[0]), int(pos[1])], float(t)])
-                elif typ == "key_press":
-                    key = act.get("key", "")
-                    if key:
-                        events.append(["key_press", str(key), float(t)])
-                elif typ == "key_release":
-                    key = act.get("key", "")
-                    if key:
-                        events.append(["key_release", str(key), float(t)])
-                # 新增：smart_* 事件，直接把参数打包为 payload（包含 IF/END-IF）
-                elif isinstance(typ, str) and typ.startswith("smart_"):
-                    payload_keys = [k for k in act.keys() if k not in ("type", "delay_ms", "repeat")]
-                    payload = {k: act[k] for k in payload_keys}
-                    events.append([typ, payload, float(t)])
+            # 条件块：父节点
+            if typ == "smart_if_block_ocr":
+                for _ in range(max(1, repeat)):
+                    t1 = add_delay(t_base, delay_ms)
+                    payload = {k: act[k] for k in ("keywords", "region", "interval", "prefer_area") if k in act}
+                    events.append(["smart_if_guard_ocr", payload, float(t1)])
+                    # 子项顺序导出
+                    child_count = it.childCount()
+                    t_child = t1
+                    for ci in range(child_count):
+                        t_child = emit_item(it.child(ci), t_child)
+                    # 结束守护，时间戳取子项后的当前 t
+                    events.append(["smart_end_guard", {}, float(t_child)])
+                    t_base = t_child
+                return t_base
+
+            # 普通与智能（非块）
+            if typ == "wait":
+                return add_delay(t_base, delay_ms)
+
+            if typ == "mouse_move":
+                pos = act.get("pos")
+                if pos:
+                    for _ in range(max(1, repeat)):
+                        t_base = add_delay(t_base, delay_ms)
+                        events.append(["mouse_move", [int(pos[0]), int(pos[1])], float(t_base)])
+                return t_base
+
+            if typ == "mouse_click":
+                btn = act.get("button", "left"); pos = act.get("pos")
+                if pos:
+                    for _ in range(max(1, repeat)):
+                        t_base = add_delay(t_base, delay_ms)
+                        events.append(["mouse_press", btn, [int(pos[0]), int(pos[1])], float(t_base)])
+                        events.append(["mouse_release", btn, [int(pos[0]), int(pos[1])], float(t_base + dt_click)])
+                        t_base += dt_click
+                return t_base
+
+            if typ == "mouse_press":
+                btn = act.get("button", "left"); pos = act.get("pos")
+                if pos:
+                    for _ in range(max(1, repeat)):
+                        t_base = add_delay(t_base, delay_ms)
+                        events.append(["mouse_press", btn, [int(pos[0]), int(pos[1])], float(t_base)])
+                return t_base
+
+            if typ == "mouse_release":
+                btn = act.get("button", "left"); pos = act.get("pos")
+                if pos:
+                    for _ in range(max(1, repeat)):
+                        t_base = add_delay(t_base, delay_ms)
+                        events.append(["mouse_release", btn, [int(pos[0]), int(pos[1])], float(t_base)])
+                return t_base
+
+            if typ in ("key_press", "key_release"):
+                key = act.get("key", "")
+                if key:
+                    for _ in range(max(1, repeat)):
+                        t_base = add_delay(t_base, delay_ms)
+                        events.append([typ, str(key), float(t_base)])
+                return t_base
+
+            # 智能与 IF-开始/结束（兼容旧）
+            if isinstance(typ, str) and typ.startswith("smart_"):
+                payload = {k: act[k] for k in act.keys() if k not in ("type", "delay_ms", "repeat")}
+                for _ in range(max(1, repeat)):
+                    t_base = add_delay(t_base, delay_ms)
+                    events.append([typ, payload, float(t_base)])
+                return t_base
+
+            return t_base
+
+        # 顶层逐项导出（支持混合：普通、智能、IF块）
+        for i in range(self.tree.topLevelItemCount()):
+            t = emit_item(self.tree.topLevelItem(i), t)
 
         default_name = time.strftime("custom_%Y%m%d_%H%M%S.json")
         return events, default_name
